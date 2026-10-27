@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pydantic
+pydantic-settings
+python-dotenv
+passlib[argon2]
+argon2-cffi
+python-jose[cryptography]
+redis
+fastapi-mail
+email-validator
+pytest

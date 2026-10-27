@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRIBHH — Портал Вакансий</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background-color: #0b0f19; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body x-data="gribhhApp()" x-init="init()">
+
+    <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <div class="flex items-center space-x-3 cursor-pointer" @click="goHome()">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-xl">
+                        G
+                    </div>
+                    <span class="text-2xl font-black tracking-widest text-emerald-400">GRIBHH</span>
+                </div>
+
+                <nav x-show="isLoggedIn" class="flex space-x-3" x-cloak>
+                    <button @click="currentTab = 'vacancies'; fetchVacancies();"
+                            :class="currentTab === 'vacancies' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'text-slate-400 border-transparent hover:text-white'"
+                            class="px-4 py-2 rounded-lg text-sm font-semibold border transition">
+                        Все вакансии
+                    </button>
+
+                    <template x-if="isHR">
+                        <button @click="currentTab = 'hr_vacancies'; fetchMyVacancies();"
+                                :class="currentTab === 'hr_vacancies' || currentTab === 'vacancy_detail' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'text-slate-400 border-transparent hover:text-white'"
+                                class="px-4 py-2 rounded-lg text-sm font-semibold border transition">
+                            Мои вакансии (<span x-text="myVacanciesTotal">0</span>)
+                        </button>
+                    </template>
+
+                    <template x-if="!isHR && !isAdmin">
+                        <div class="flex space-x-3">
+                            <button @click="currentTab = 'my_resumes'; fetchMyResumes();"
+                                    :class="currentTab === 'my_resumes' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'text-slate-400 border-transparent hover:text-white'"
+                                    class="px-4 py-2 rounded-lg text-sm font-semibold border transition">
+                                Мои резюме
+                            </button>
+                            <button @click="currentTab = 'my_applications'; fetchMyApplications();"
+                                    :class="currentTab === 'my_applications' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'text-slate-400 border-transparent hover:text-white'"
+                                    class="px-4 py-2 rounded-lg text-sm font-semibold border transition">
+                                Мои отклики
+                            </button>
+                        </div>
+                    </template>
+
+                    <template x-if="isAdmin">
+                        <button @click="currentTab = 'admin_panel'; fetchAdminData();"
+                                :class="currentTab === 'admin_panel' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50' : 'text-purple-300 border-transparent hover:text-white'"
+                                class="px-4 py-2 rounded-lg text-sm font-bold border transition bg-purple-950/40">
+                            ⚙️ Панель Администратора
+                        </button>
+                    </template>
+                </nav>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <template x-if="!isLoggedIn">
+                    <div class="flex space-x-3">
+                        <button @click="currentTab = 'login'" class="px-4 py-2 text-sm text-slate-300 hover:text-white">Войти</button>
+                        <button @click="currentTab = 'register'" class="px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition">Регистрация</button>
+                    </div>
+                </template>
+
+                <template x-if="isLoggedIn">
+                    <div class="flex items-center space-x-4">
+                        <span class="px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" x-text="userRole"></span>
+                        <button @click="logout()" class="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg">Выйти</button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-6 mt-4">
+        <div x-show="errorMessage" x-cloak class="p-4 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl text-sm mb-4" x-text="errorMessage"></div>
+        <div x-show="successMessage" x-cloak class="p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl text-sm mb-4" x-text="successMessage"></div>
+    </div>
+
+    <main class="max-w-7xl mx-auto px-6 py-8">
+
+        <!-- Авторизация -->
+        <section x-show="currentTab === 'login'" x-cloak class="max-w-md mx-auto bg-slate-900 border border-slate-800 p-8 rounded-2xl">
+            <h2 class="text-2xl font-bold text-white mb-6">Вход в систему</h2>
+            <form @submit.prevent="login()" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Email</label>
+                    <input type="email" x-model="loginForm.email" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Пароль</label>
+                    <input type="password" x-model="loginForm.password" required maxlength="128" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <button type="submit" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition">Войти</button>
+            </form>
+        </section>
+
+        <!-- Регистрация -->
+        <section x-show="currentTab === 'register'" x-cloak class="max-w-md mx-auto bg-slate-900 border border-slate-800 p-8 rounded-2xl">
+            <h2 class="text-2xl font-bold text-white mb-6">Регистрация</h2>
+            <form @submit.prevent="register()" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">ФИО</label>
+                    <input type="text" x-model="registerForm.full_name" required minlength="2" maxlength="150" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Email</label>
+                    <input type="email" x-model="registerForm.email" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Пароль</label>
+                    <input type="password" x-model="registerForm.password" required minlength="8" maxlength="128" title="Минимум 8 символов, заглавная буква и цифра" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Роль</label>
+                    <select x-model="registerForm.role" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+                        <option value="candidate">Соискатель</option>
+                        <option value="hr">HR / Работодатель</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition">Зарегистрироваться</button>
+            </form>
+        </section>
+
+        <!-- Список всех вакансий -->
+        <section x-show="currentTab === 'vacancies'" x-cloak>
+            <div class="flex flex-wrap justify-between items-end gap-4 mb-6">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">Список активных вакансий</h1>
+                    <p class="text-slate-400 text-sm mt-1">
+                        Найдено: <span class="text-emerald-400 font-semibold" x-text="vacanciesTotal"></span>
+                        <span x-show="vacanciesPages > 1" x-text="`, страница ${vacanciesPage} из ${vacanciesPages}`"></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Поиск и фильтры -->
+            <form @submit.prevent="fetchVacancies(1)"
+                  class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+                <div class="lg:col-span-2">
+                    <label class="block text-xs text-slate-400 mb-1">Ключевые слова</label>
+                    <input type="text" x-model="vacancyFilter.q" maxlength="100"
+                           placeholder="Должность, навык, слово из описания"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Зарплата от</label>
+                    <input type="number" x-model="vacancyFilter.salary_from" min="0" max="10000000"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Зарплата до</label>
+                    <input type="number" x-model="vacancyFilter.salary_to" min="0" max="10000000"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Опыт</label>
+                    <select x-model="vacancyFilter.max_experience"
+                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                        <option value="">Любой</option>
+                        <option value="0">Без опыта</option>
+                        <option value="1">До 1 года</option>
+                        <option value="3">До 3 лет</option>
+                        <option value="5">До 5 лет</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Сортировка</label>
+                    <select x-model="vacancyFilter.sort"
+                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                        <option value="new">Сначала новые</option>
+                        <option value="salary_desc">Зарплата: по убыванию</option>
+                        <option value="salary_asc">Зарплата: по возрастанию</option>
+                    </select>
+                </div>
+                <div class="lg:col-span-6 flex flex-wrap gap-3">
+                    <button type="submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-sm transition">
+                        Найти
+                    </button>
+                    <button type="button" @click="resetVacancyFilter()"
+                            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition">
+                        Сбросить
+                    </button>
+                </div>
+            </form>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="vac in vacancies" :key="vac.id">
+                    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-xl font-bold text-white" x-text="vac.title"></h3>
+                                <span x-show="vac.is_archived" class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-xs px-2.5 py-1 rounded-full font-bold">
+                                    Архив
+                                </span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-4 line-clamp-3" x-text="vac.description || 'Описание отсутствует'"></p>
+                        </div>
+                        <div class="border-t border-slate-800 pt-4 flex flex-col gap-2">
+                            <div class="flex justify-between items-center text-xs text-slate-400">
+                                <span class="text-emerald-400 font-bold text-sm" x-text="`${vac.salary_from || 0} - ${vac.salary_to || 0} ₽`"></span>
+                                <span class="bg-slate-800 px-2.5 py-1 rounded-md" x-text="`Опыт: ${vac.required_experience || 0} лет`"></span>
+                            </div>
+                            <template x-if="isLoggedIn && !isHR && !isAdmin && !vac.is_archived">
+                                <button @click="openApplyModal(vac)" class="w-full mt-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition">
+                                    Откликнуться
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="!vacancies.length" class="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
+                По вашему запросу ничего не найдено. Попробуйте изменить фильтры.
+            </div>
+
+            <nav x-show="vacanciesPages > 1" class="flex items-center justify-center gap-2 mt-8">
+                <button @click="fetchVacancies(vacanciesPage - 1)" :disabled="vacanciesPage <= 1"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                <template x-for="(p, i) in pageWindow(vacanciesPage, vacanciesPages)" :key="i">
+                    <button @click="p !== '...' && fetchVacancies(p)" :disabled="p === '...'"
+                            :class="p === vacanciesPage ? 'bg-emerald-500 text-slate-950 border-emerald-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'"
+                            class="px-3 py-2 rounded-lg border text-sm font-semibold transition" x-text="p"></button>
+                </template>
+                <button @click="fetchVacancies(vacanciesPage + 1)" :disabled="vacanciesPage >= vacanciesPages"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+            </nav>
+        </section>
+
+        <!-- HR: Мои вакансии -->
+        <section x-show="currentTab === 'hr_vacancies' && (isHR || isAdmin)" x-cloak>
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">Мои вакансии</h1>
+                    <p class="text-slate-400 text-sm mt-1">
+                        Всего: <span class="text-emerald-400 font-semibold" x-text="myVacanciesTotal"></span>
+                        <span x-show="myVacanciesPages > 1" x-text="`, страница ${myVacanciesPage} из ${myVacanciesPages}`"></span>
+                    </p>
+                </div>
+                <button @click="showCreateVacancyModal = true" class="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition">
+                    + Создать вакансию
+                </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mb-6">
+                <button @click="setMyVacancyStatus('active')"
+                        :class="myVacancyStatus === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'text-slate-400 border-slate-700 hover:text-white'"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition">Активные</button>
+                <button @click="setMyVacancyStatus('archived')"
+                        :class="myVacancyStatus === 'archived' ? 'bg-amber-500/10 text-amber-400 border-amber-500/40' : 'text-slate-400 border-slate-700 hover:text-white'"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition">Архив</button>
+                <button @click="setMyVacancyStatus('all')"
+                        :class="myVacancyStatus === 'all' ? 'bg-slate-700 text-white border-slate-500' : 'text-slate-400 border-slate-700 hover:text-white'"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition">Все</button>
+
+                <form @submit.prevent="fetchMyVacancies(1)" class="flex gap-2 ml-auto">
+                    <input type="text" x-model="myVacancyQuery" maxlength="100" placeholder="Поиск по моим вакансиям"
+                           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500">
+                    <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition">Найти</button>
+                </form>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="vac in myVacancies" :key="vac.id">
+                    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
+                        <div @click="openVacancyCandidates(vac)" class="cursor-pointer">
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="text-xl font-bold text-white" x-text="vac.title"></h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-3 py-1 rounded-full font-bold border border-emerald-500/20" x-text="`Отклики: ${vac.applications_count || 0}`"></span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-4" x-text="vac.description || 'Без описания'"></p>
+                        </div>
+                        <div class="border-t border-slate-800 pt-4 flex flex-col gap-3">
+                            <div class="flex justify-between items-center text-xs text-slate-400">
+                                <span class="text-emerald-400 font-bold" x-text="`${vac.salary_from || 0} - ${vac.salary_to || 0} ₽`"></span>
+                                <span class="bg-slate-800 px-2.5 py-1 rounded-md" x-text="`Опыт: ${vac.required_experience || 0} лет`"></span>
+                            </div>
+                            <button @click.stop="archiveVacancy(vac.id)" class="w-full px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/40 rounded-lg font-semibold text-xs transition">
+                                Заархивировать
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="!myVacancies.length" class="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
+                В этой категории вакансий пока нет.
+            </div>
+
+            <nav x-show="myVacanciesPages > 1" class="flex items-center justify-center gap-2 mt-8">
+                <button @click="fetchMyVacancies(myVacanciesPage - 1)" :disabled="myVacanciesPage <= 1"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                <template x-for="(p, i) in pageWindow(myVacanciesPage, myVacanciesPages)" :key="i">
+                    <button @click="p !== '...' && fetchMyVacancies(p)" :disabled="p === '...'"
+                            :class="p === myVacanciesPage ? 'bg-emerald-500 text-slate-950 border-emerald-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'"
+                            class="px-3 py-2 rounded-lg border text-sm font-semibold transition" x-text="p"></button>
+                </template>
+                <button @click="fetchMyVacancies(myVacanciesPage + 1)" :disabled="myVacanciesPage >= myVacanciesPages"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+            </nav>
+        </section>
+
+        <!-- HR: Детализация кандидатов (ИСПРАВЛЕНО: 6 колонок) -->
+        <section x-show="currentTab === 'vacancy_detail' && isHR" x-cloak>
+            <div class="mb-6">
+                <button @click="currentTab = 'hr_vacancies'" class="text-sm text-slate-400 hover:text-white transition mb-4">← Назад к вакансиям</button>
+                <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+                    <span class="text-xs uppercase tracking-wider text-emerald-400 font-bold">Кандидаты</span>
+                    <h1 class="text-3xl font-bold text-white mt-1" x-text="selectedVacancy?.title"></h1>
+                    <p class="text-slate-400 text-sm mt-2">
+                        Откликов: <span class="text-emerald-400 font-semibold" x-text="vacancyApplicationsTotal"></span>
+                        <span x-show="vacancyApplicationsPages > 1" x-text="`, страница ${vacancyApplicationsPage} из ${vacancyApplicationsPages}`"></span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                            <th class="py-4 px-6">Соискатель</th>
+                            <th class="py-4 px-6">Должность</th>
+                            <th class="py-4 px-6">Опыт</th>
+                            <th class="py-4 px-6">Навыки</th>
+                            <th class="py-4 px-6">Статус</th>
+                            <th class="py-4 px-6 text-right">Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-sm">
+                        <template x-for="app in vacancyApplications" :key="app.id">
+                            <tr class="hover:bg-slate-800/40 transition">
+                                <td class="py-4 px-6">
+                                    <div class="font-bold text-white" x-text="app.resume?.full_name || 'Кандидат'"></div>
+                                    <div class="text-xs text-slate-400" x-text="app.resume?.email || ''"></div>
+                                </td>
+                                <td class="py-4 px-6 text-slate-300" x-text="app.resume?.target_position || 'Не указана'"></td>
+                                <td class="py-4 px-6 text-slate-300">
+                                    <span class="bg-slate-800 px-2.5 py-1 rounded-md text-xs"
+                                          x-text="`${app.resume?.experience_years || 0} лет`"></span>
+                                </td>
+                                <td class="py-4 px-6 text-slate-300 max-w-xs truncate" x-text="app.resume?.skills || 'Не указаны'"></td>
+                                <td class="py-4 px-6">
+                                    <span class="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-full text-xs font-semibold" x-text="app.status"></span>
+                                </td>
+                                <td class="py-4 px-6 text-right">
+                                    <button @click="inviteCandidate(app.id)" class="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/40 rounded-lg font-semibold text-xs transition">
+                                        Пригласить
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="vacancyApplications.length === 0">
+                            <tr>
+                                <td colspan="6" class="py-8 text-center text-slate-500">На эту вакансию пока нет откликов</td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <nav x-show="vacancyApplicationsPages > 1" class="flex items-center justify-center gap-2 mt-8">
+                <button @click="fetchVacancyApplications(vacancyApplicationsPage - 1)" :disabled="vacancyApplicationsPage <= 1"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                <template x-for="(p, i) in pageWindow(vacancyApplicationsPage, vacancyApplicationsPages)" :key="i">
+                    <button @click="p !== '...' && fetchVacancyApplications(p)" :disabled="p === '...'"
+                            :class="p === vacancyApplicationsPage ? 'bg-emerald-500 text-slate-950 border-emerald-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'"
+                            class="px-3 py-2 rounded-lg border text-sm font-semibold transition" x-text="p"></button>
+                </template>
+                <button @click="fetchVacancyApplications(vacancyApplicationsPage + 1)" :disabled="vacancyApplicationsPage >= vacancyApplicationsPages"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+            </nav>
+        </section>
+
+        <!-- Соискатель: Мои резюме -->
+        <section x-show="currentTab === 'my_resumes' && !isHR && !isAdmin" x-cloak>
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">Мои резюме</h1>
+                    <p class="text-slate-400 text-sm mt-1">Управляйте сохраненными резюме</p>
+                </div>
+                <button @click="showCreateResumeModal = true" class="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition">
+                    + Создать резюме
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <template x-for="res in myResumes" :key="res.id">
+                    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xl font-bold text-white mb-1" x-text="res.target_position"></h3>
+                            <p class="text-emerald-400 text-sm font-semibold mb-2" x-text="res.full_name"></p>
+                            <p class="text-slate-400 text-xs mb-2" x-text="`Опыт работы: ${res.experience_years || 0} лет`"></p>
+                            <p class="text-slate-300 text-sm bg-slate-800/50 p-3 rounded-xl border border-slate-700/50" x-text="`Навыки: ${res.skills || 'Не указаны'}`"></p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </section>
+
+        <!-- Соискатель: Мои отклики -->
+        <section x-show="currentTab === 'my_applications' && !isHR && !isAdmin" x-cloak>
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-white">Мои отклики</h1>
+                <p class="text-slate-400 text-sm mt-1">
+                    История отправленных откликов на вакансии. Всего:
+                    <span class="text-emerald-400 font-semibold" x-text="applicationsTotal"></span>
+                    <span x-show="applicationsPages > 1" x-text="`, страница ${applicationsPage} из ${applicationsPages}`"></span>
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <template x-for="app in myApplications" :key="app.id">
+                    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-xl font-bold text-white" x-text="app.vacancy?.title || 'Вакансия'"></h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-1 rounded-full font-bold" x-text="app.status || 'Отправлен'"></span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-4" x-text="app.vacancy?.description || ''"></p>
+                        </div>
+                        <div class="border-t border-slate-800 pt-4 flex justify-between items-center text-xs text-slate-400">
+                            <span x-text="`Зарплата: ${app.vacancy?.salary_from || 0} - ${app.vacancy?.salary_to || 0} ₽`"></span>
+                            <span class="text-emerald-400 font-semibold" x-text="`Резюме ID: ${app.resume_id}`"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="!myApplications.length" class="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
+                Вы пока не отправляли отклики.
+            </div>
+
+            <nav x-show="applicationsPages > 1" class="flex items-center justify-center gap-2 mt-8">
+                <button @click="fetchMyApplications(applicationsPage - 1)" :disabled="applicationsPage <= 1"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                <template x-for="(p, i) in pageWindow(applicationsPage, applicationsPages)" :key="i">
+                    <button @click="p !== '...' && fetchMyApplications(p)" :disabled="p === '...'"
+                            :class="p === applicationsPage ? 'bg-emerald-500 text-slate-950 border-emerald-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'"
+                            class="px-3 py-2 rounded-lg border text-sm font-semibold transition" x-text="p"></button>
+                </template>
+                <button @click="fetchMyApplications(applicationsPage + 1)" :disabled="applicationsPage >= applicationsPages"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+            </nav>
+        </section>
+
+        <!-- Панель Администратора -->
+        <section x-show="currentTab === 'admin_panel' && isAdmin" x-cloak class="space-y-8">
+            <div class="border-b border-purple-500/30 pb-4">
+                <h1 class="text-3xl font-black text-purple-400">Панель Администратора</h1>
+                <p class="text-slate-400 text-sm mt-1">
+                    Полное управление сервисом. Вакансий:
+                    <span class="text-purple-300 font-semibold" x-text="adminTotal"></span>
+                    <span x-show="adminPages > 1" x-text="`, страница ${adminPage} из ${adminPages}`"></span>
+                </p>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 border-b border-slate-800">
+                        <tr>
+                            <th class="p-3">ID</th>
+                            <th class="p-3">Заголовок</th>
+                            <th class="p-3">Статус</th>
+                            <th class="p-3 text-right">Управление</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="v in allAdminVacancies" :key="v.id">
+                            <tr class="border-b border-slate-800/50">
+                                <td class="p-3 text-slate-400" x-text="v.id"></td>
+                                <td class="p-3 font-semibold text-white" x-text="v.title"></td>
+                                <td class="p-3">
+                                    <span x-show="v.is_archived" class="text-xs text-amber-400 font-bold">В архиве</span>
+                                    <span x-show="!v.is_archived" class="text-xs text-emerald-400 font-bold">Активна</span>
+                                </td>
+                                <td class="p-3 text-right">
+                                    <button @click="archiveVacancy(v.id)" class="px-3 py-1 bg-red-500/20 text-red-400 hover:bg-red-500/40 rounded text-xs transition">
+                                        Заархивировать
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <nav x-show="adminPages > 1" class="flex items-center justify-center gap-2 mt-6">
+                <button @click="fetchAdminData(adminPage - 1)" :disabled="adminPage <= 1"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                <template x-for="(p, i) in pageWindow(adminPage, adminPages)" :key="i">
+                    <button @click="p !== '...' && fetchAdminData(p)" :disabled="p === '...'"
+                            :class="p === adminPage ? 'bg-purple-500 text-slate-950 border-purple-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'"
+                            class="px-3 py-2 rounded-lg border text-sm font-semibold transition" x-text="p"></button>
+                </template>
+                <button @click="fetchAdminData(adminPage + 1)" :disabled="adminPage >= adminPages"
+                        class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+            </nav>
+        </section>
+
+    </main>
+
+    <!-- Модальное окно создания вакансии -->
+    <div x-show="showCreateVacancyModal" x-cloak class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg">
+            <h3 class="text-xl font-bold text-white mb-4">Создание вакансии</h3>
+            <form @submit.prevent="createVacancy()" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Заголовок</label>
+                    <input type="text" x-model="vacancyForm.title" required minlength="2" maxlength="200" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Описание</label>
+                    <textarea x-model="vacancyForm.description" rows="3" maxlength="5000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Зарплата от (₽)</label>
+                        <input type="number" x-model.number="vacancyForm.salary_from" min="0" max="10000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Зарплата до (₽)</label>
+                        <input type="number" x-model.number="vacancyForm.salary_to" min="0" max="10000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Требуемый опыт (лет)</label>
+                    <input type="number" x-model.number="vacancyForm.required_experience" min="0" max="60" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" @click="showCreateVacancyModal = false" class="px-4 py-2 text-slate-400 hover:text-white text-sm">Отмена</button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-sm">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно создания резюме -->
+    <div x-show="showCreateResumeModal" x-cloak class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg">
+            <h3 class="text-xl font-bold text-white mb-4">Новое резюме</h3>
+            <form @submit.prevent="createResume()" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Желаемая должность</label>
+                    <input type="text" x-model="resumeForm.target_position" required minlength="2" maxlength="160" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">ФИО</label>
+                    <input type="text" x-model="resumeForm.full_name" maxlength="150" placeholder="По умолчанию — из профиля" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Опыт работы (лет)</label>
+                    <input type="number" x-model.number="resumeForm.experience_years" min="0" max="60" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Навыки</label>
+                    <textarea x-model="resumeForm.skills" rows="3" required minlength="2" maxlength="2000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" @click="showCreateResumeModal = false" class="px-4 py-2 text-slate-400 hover:text-white text-sm">Отмена</button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-sm">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно отклика -->
+    <div x-show="showApplyModal" x-cloak class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md">
+            <h3 class="text-xl font-bold text-white mb-2">Отклик</h3>
+            <p class="text-emerald-400 font-semibold text-sm mb-4" x-text="targetVacancyForApply?.title"></p>
+            <form @submit.prevent="submitApply()" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Выберите резюме</label>
+                    <select x-model="applyForm.resume_id" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+                        <option value="" disabled selected>-- Выберите резюме --</option>
+                        <template x-for="res in myResumes" :key="res.id">
+                            <option :value="res.id" x-text="`${res.target_position} (${res.full_name || 'Без имени'})`"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" @click="showApplyModal = false" class="px-4 py-2 text-slate-400 hover:text-white text-sm">Отмена</button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-sm">Отправить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function gribhhApp() {
+            return {
+                isLoggedIn: false,
+                currentTab: 'vacancies',
+                userRole: '',
+                errorMessage: '',
+                successMessage: '',
+
+                // Список вакансий для соискателя
+                vacancies: [],
+                vacanciesTotal: 0,
+                vacanciesPage: 1,
+                vacanciesPages: 1,
+                vacanciesPageSize: 9,
+                vacancyFilter: {
+                    q: '',
+                    salary_from: '',
+                    salary_to: '',
+                    max_experience: '',
+                    sort: 'new'
+                },
+
+                // Кабинет HR
+                myVacancies: [],
+                myVacanciesTotal: 0,
+                myVacanciesPage: 1,
+                myVacanciesPages: 1,
+                myVacanciesPageSize: 9,
+                myVacancyStatus: 'active',
+                myVacancyQuery: '',
+
+                // Резюме и отклики соискателя
+                myResumes: [],
+                myApplications: [],
+                applicationsTotal: 0,
+                applicationsPage: 1,
+                applicationsPages: 1,
+                applicationsPageSize: 6,
+
+                // Админ-панель
+                allAdminVacancies: [],
+                adminTotal: 0,
+                adminPage: 1,
+                adminPages: 1,
+                adminPageSize: 10,
+
+                // Выбранная вакансия и её отклики (постранично)
+                selectedVacancy: null,
+                vacancyApplications: [],
+                vacancyApplicationsTotal: 0,
+                vacancyApplicationsPage: 1,
+                vacancyApplicationsPages: 1,
+                vacancyApplicationsPageSize: 10,
+                targetVacancyForApply: null,
+
+                showCreateVacancyModal: false,
+                showCreateResumeModal: false,
+                showApplyModal: false,
+
+                vacancyForm: {
+                    title: '',
+                    description: '',
+                    salary_from: 0,
+                    salary_to: 0,
+                    required_experience: 0
+                },
+                resumeForm: {
+                    target_position: '',
+                    full_name: '',
+                    experience_years: 0,
+                    skills: ''
+                },
+                applyForm: { vacancy_id: null, resume_id: '' },
+                loginForm: { email: '', password: '' },
+                registerForm: { full_name: '', email: '', password: '', role: 'candidate' },
+
+                get isHR() {
+                    const r = String(this.userRole || '').trim().toLowerCase();
+                    return r === 'hr' || r === 'employer';
+                },
+
+                get isAdmin() {
+                    return String(this.userRole || '').trim().toLowerCase() === 'admin';
+                },
+
+                async init() {
+                    await this.checkAuth();
+                    this.fetchVacancies();
+                },
+
+                async checkAuth() {
+                    try {
+                        const res = await fetch('/auth/me');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.isLoggedIn = true;
+                            this.userRole = data.role || 'candidate';
+                        } else {
+                            this.isLoggedIn = false;
+                        }
+                    } catch (err) {
+                        this.isLoggedIn = false;
+                    }
+                },
+
+                goHome() {
+                    this.currentTab = 'vacancies';
+                    this.fetchVacancies();
+                },
+
+                showMessage(msg, isError = false) {
+                    if (isError) {
+                        this.errorMessage = msg;
+                        setTimeout(() => this.errorMessage = '', 4000);
+                    } else {
+                        this.successMessage = msg;
+                        setTimeout(() => this.successMessage = '', 4000);
+                    }
+                },
+
+                // Текст ошибки из ответа сервера (detail) вместо общего сообщения
+                async errorText(res, fallback) {
+                    if (res.status === 401) {
+                        this.isLoggedIn = false;
+                        this.userRole = '';
+                    }
+                    try {
+                        const data = await res.json();
+                        if (typeof data.detail === 'string' && data.detail) return data.detail;
+                    } catch (e) { /* ответ не JSON */ }
+                    return fallback;
+                },
+
+                async doLogin(email, password) {
+                    const res = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email.trim(), password })
+                    });
+                    if (!res.ok) throw new Error(await this.errorText(res, 'Неверный email или пароль'));
+                    const data = await res.json();
+                    this.isLoggedIn = true;
+                    this.userRole = data.role || 'candidate';
+                },
+
+                async login() {
+                    try {
+                        await this.doLogin(this.loginForm.email, this.loginForm.password);
+                        this.loginForm = { email: '', password: '' };
+                        this.showMessage('Успешный вход');
+                        this.goHome();
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async register() {
+                    try {
+                        const form = { ...this.registerForm, email: this.registerForm.email.trim() };
+                        const res = await fetch('/auth/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(form)
+                        });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка регистрации'));
+                        // Регистрация не выдает cookie, поэтому сразу выполняем вход
+                        await this.doLogin(form.email, form.password);
+                        this.registerForm = { full_name: '', email: '', password: '', role: 'candidate' };
+                        this.showMessage('Регистрация прошла успешно!');
+                        this.goHome();
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async logout() {
+                    try {
+                        await fetch('/auth/logout', { method: 'POST' });
+                    } catch (err) {
+                        this.showMessage('Ошибка при выходе', true);
+                    }
+                    this.isLoggedIn = false;
+                    this.userRole = '';
+                    this.myVacancies = [];
+                    this.myVacanciesTotal = 0;
+                    this.myVacanciesPage = 1;
+                    this.myResumes = [];
+                    this.myApplications = [];
+                    this.applicationsTotal = 0;
+                    this.applicationsPage = 1;
+                    this.allAdminVacancies = [];
+                    this.adminTotal = 0;
+                    this.adminPage = 1;
+                    this.selectedVacancy = null;
+                    this.vacancyApplications = [];
+                    this.vacancyApplicationsTotal = 0;
+                    this.currentTab = 'vacancies';
+                    this.fetchVacancies(1);
+                    this.showMessage('Вы вышли из системы');
+                },
+
+                // Номера страниц с многоточием: 1 … 4 [5] 6 … 12
+                pageWindow(current, total) {
+                    if (total <= 1) return [];
+                    if (total <= 7) {
+                        return Array.from({ length: total }, (_, i) => i + 1);
+                    }
+                    const pages = [1];
+                    const start = Math.max(2, current - 1);
+                    const end = Math.min(total - 1, current + 1);
+                    if (start > 2) pages.push('...');
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    if (end < total - 1) pages.push('...');
+                    pages.push(total);
+                    return pages;
+                },
+
+                async fetchVacancies(page = 1) {
+                    try {
+                        const params = new URLSearchParams({
+                            page: String(page),
+                            page_size: String(this.vacanciesPageSize),
+                            sort: this.vacancyFilter.sort || 'new'
+                        });
+                        const q = (this.vacancyFilter.q || '').trim();
+                        if (q) params.set('q', q);
+                        if (this.vacancyFilter.salary_from !== '' && this.vacancyFilter.salary_from !== null) {
+                            params.set('salary_from', this.vacancyFilter.salary_from);
+                        }
+                        if (this.vacancyFilter.salary_to !== '' && this.vacancyFilter.salary_to !== null) {
+                            params.set('salary_to', this.vacancyFilter.salary_to);
+                        }
+                        if (this.vacancyFilter.max_experience !== '' && this.vacancyFilter.max_experience !== null) {
+                            params.set('max_experience', this.vacancyFilter.max_experience);
+                        }
+
+                        const res = await fetch(`/vacancies/?${params.toString()}`);
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка загрузки вакансий'));
+                        const data = await res.json();
+
+                        this.vacancies = data.items;
+                        this.vacanciesTotal = data.total;
+                        this.vacanciesPage = data.page;
+                        this.vacanciesPages = data.pages;
+                    } catch (err) {
+                        console.error('Ошибка загрузки вакансий', err);
+                    }
+                },
+
+                resetVacancyFilter() {
+                    this.vacancyFilter = {
+                        q: '',
+                        salary_from: '',
+                        salary_to: '',
+                        max_experience: '',
+                        sort: 'new'
+                    };
+                    this.fetchVacancies(1);
+                },
+
+                async fetchMyVacancies(page = 1) {
+                    try {
+                        const params = new URLSearchParams({
+                            page: String(page),
+                            page_size: String(this.myVacanciesPageSize),
+                            status: this.myVacancyStatus
+                        });
+                        const q = (this.myVacancyQuery || '').trim();
+                        if (q) params.set('q', q);
+
+                        const res = await fetch(`/vacancies/my?${params.toString()}`);
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка загрузки моих вакансий'));
+                        const data = await res.json();
+
+                        this.myVacancies = data.items;
+                        this.myVacanciesTotal = data.total;
+                        this.myVacanciesPage = data.page;
+                        this.myVacanciesPages = data.pages;
+                    } catch (err) {
+                        console.error('Ошибка загрузки моих вакансий', err);
+                    }
+                },
+
+                setMyVacancyStatus(status) {
+                    this.myVacancyStatus = status;
+                    this.fetchMyVacancies(1);
+                },
+
+                async createVacancy() {
+                    try {
+                        const res = await fetch('/vacancies/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.vacancyForm)
+                        });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка создания вакансии'));
+                        this.showCreateVacancyModal = false;
+                        this.vacancyForm = { title: '', description: '', salary_from: 0, salary_to: 0, required_experience: 0 };
+                        this.myVacancyStatus = 'active';
+                        this.fetchMyVacancies(1);
+                        this.fetchVacancies(1);
+                        this.showMessage('Вакансия успешно создана');
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async archiveVacancy(id) {
+                    if (!confirm('Вы уверены, что хотите заархивировать вакансию?')) return;
+                    try {
+                        const res = await fetch(`/vacancies/${id}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка архивации'));
+                        this.fetchMyVacancies(this.myVacanciesPage);
+                        this.fetchVacancies(this.vacanciesPage);
+                        if (this.isAdmin) this.fetchAdminData(this.adminPage);
+                        this.showMessage('Вакансия заархивирована');
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async fetchMyResumes() {
+                    try {
+                        const res = await fetch('/candidates/my-resumes');
+                        if (res.ok) {
+                            this.myResumes = await res.json();
+                        }
+                    } catch (err) {
+                        console.error('Ошибка загрузки резюме', err);
+                    }
+                },
+
+                async createResume() {
+                    try {
+                        const res = await fetch('/candidates/resumes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.resumeForm)
+                        });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка создания резюме'));
+                        this.showCreateResumeModal = false;
+                        this.resumeForm = { target_position: '', full_name: '', experience_years: 0, skills: '' };
+                        this.fetchMyResumes();
+                        this.showMessage('Резюме успешно создано');
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async openApplyModal(vac) {
+                    this.targetVacancyForApply = vac;
+                    this.applyForm.vacancy_id = vac.id;
+                    this.applyForm.resume_id = '';
+                    await this.fetchMyResumes();
+                    this.showApplyModal = true;
+                },
+
+                async submitApply() {
+                    try {
+                        const res = await fetch('/candidates/apply', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                vacancy_id: this.applyForm.vacancy_id,
+                                resume_id: Number(this.applyForm.resume_id)
+                            })
+                        });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка отправки отклика'));
+                        this.showApplyModal = false;
+                        this.showMessage('Отклик успешно отправлен!');
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async fetchMyApplications(page = 1) {
+                    try {
+                        const params = new URLSearchParams({
+                            page: String(page),
+                            page_size: String(this.applicationsPageSize)
+                        });
+                        const res = await fetch(`/candidates/applications?${params.toString()}`);
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка загрузки откликов'));
+                        const data = await res.json();
+
+                        this.myApplications = data.items;
+                        this.applicationsTotal = data.total;
+                        this.applicationsPage = data.page;
+                        this.applicationsPages = data.pages;
+                    } catch (err) {
+                        console.error('Ошибка загрузки откликов', err);
+                    }
+                },
+
+                async openVacancyCandidates(vac) {
+                    this.selectedVacancy = vac;
+                    this.currentTab = 'vacancy_detail';
+                    await this.fetchVacancyApplications(1);
+                },
+
+                async fetchVacancyApplications(page = 1) {
+                    if (!this.selectedVacancy) return;
+                    try {
+                        const params = new URLSearchParams({
+                            page: String(page),
+                            page_size: String(this.vacancyApplicationsPageSize)
+                        });
+                        const res = await fetch(`/vacancies/${this.selectedVacancy.id}/applications?${params.toString()}`);
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка загрузки откликов'));
+                        const data = await res.json();
+
+                        this.vacancyApplications = data.items;
+                        this.vacancyApplicationsTotal = data.total;
+                        this.vacancyApplicationsPage = data.page;
+                        this.vacancyApplicationsPages = data.pages;
+                    } catch (err) {
+                        console.error('Ошибка загрузки откликов вакансии', err);
+                    }
+                },
+
+                async inviteCandidate(appId) {
+                    try {
+                        const res = await fetch(`/candidates/applications/${appId}/invite`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: "Вы приглашены на собеседование!" })
+                        });
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка при отправке приглашения'));
+
+                        this.showMessage('Приглашение успешно отправлено!');
+                        await this.fetchMyVacancies(this.myVacanciesPage);
+                        await this.fetchVacancyApplications(this.vacancyApplicationsPage);
+                    } catch (err) {
+                        this.showMessage(err.message, true);
+                    }
+                },
+
+                async fetchAdminData(page = 1) {
+                    try {
+                        const params = new URLSearchParams({
+                            page: String(page),
+                            page_size: String(this.adminPageSize),
+                            status: 'all',
+                            sort: 'new'
+                        });
+                        const res = await fetch(`/vacancies/admin/all?${params.toString()}`);
+                        if (!res.ok) throw new Error(await this.errorText(res, 'Ошибка загрузки данных админа'));
+                        const data = await res.json();
+
+                        this.allAdminVacancies = data.items;
+                        this.adminTotal = data.total;
+                        this.adminPage = data.page;
+                        this.adminPages = data.pages;
+                    } catch (err) {
+                        console.error('Ошибка загрузки данных админа', err);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
